@@ -1,5 +1,7 @@
 import {Context, Schema, Time} from 'koishi'
 import * as pty from "node-pty";
+import {chmodSync, statSync} from 'node:fs'
+import {dirname, join} from 'node:path'
 import {clearTimeout} from "node:timers";
 
 export const name = 'terminal'
@@ -66,6 +68,17 @@ function getKey(session: any) {
     return `${session.platform}:${session.userId}`;
 }
 
+function fixNodePtyHelper() {
+    if (process.platform !== 'darwin') return;
+
+    try {
+        const root = dirname(require.resolve('node-pty/package.json'));
+        const helper = join(root, 'prebuilds', `darwin-${process.arch}`, 'spawn-helper');
+        const mode = statSync(helper).mode;
+        if (!(mode & 0o111)) chmodSync(helper, mode | 0o755);
+    } catch {}
+}
+
 function isInteractiveCommand(command: string) {
     const trimmed = command.trim();
     if (!trimmed) return false;
@@ -76,7 +89,7 @@ function isInteractiveCommand(command: string) {
     if (/^(less|more|man)$/.test(name)) return true
     if (/^(top|htop|btop|watch)$/.test(name)) return true
     if (/^(tmux|screen)$/.test(name)) return true
-    if (/^(ssh|sftp|ftp|telnet)$/.test(name)) return true
+    if (/^(sftp|ftp|telnet)$/.test(name)) return true
     if (/^(mysql|psql|sqlite3|redis-cli|mongosh)$/.test(name)) return true
     if (/^(node|python|python3|ipython|ruby|irb|php|lua|R)$/.test(name) && !args.length) return true
 
@@ -89,6 +102,7 @@ function isInteractiveCommand(command: string) {
 const map = new Map<string, ShellSession>();
 
 export function apply(ctx: Context, config: Config) {
+    fixNodePtyHelper();
 
     const allowedUsers = config.admin;
 
