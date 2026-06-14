@@ -24,7 +24,7 @@ export interface ShellSession {
 }
 
 export const Config: Schema<Config> = Schema.object({
-    admin: Schema.array(String).description("超级管理员用户，具有绝对权限。"),
+    admin: Schema.array(String).description("超级管理员用户，具有绝对权限。").default([]),
     root: Schema.string().description("初始工作路径。").default(process.env.HOME),
     shell: Schema.string().description("Shell路径。留空则自动检测系统默认Shell。"),
     encoding: Schema.string().description("输出内容编码。").default("utf8"),
@@ -71,8 +71,8 @@ export function apply(ctx: Context, config: Config) {
         shellSession.terminal.write("pwd\r");
     }
 
-    function initSession(session, key): ShellSession {
-        const terminal = pty.spawn(config.shell, [], {
+    function initSession(session, key:string): ShellSession {
+        const terminal = pty.spawn(resolveShell(config.shell), [], {
             name: "terminal",
             cols: config.cols,
             rows: config.rows,
@@ -107,7 +107,7 @@ export function apply(ctx: Context, config: Config) {
         })
 
         const exitDisposable = terminal.onExit(async () => {
-            cleanupSession(shellSession);
+            cleanupSession(shellSession,key);
             await session.send("Shell exited.")
         })
 
@@ -116,14 +116,15 @@ export function apply(ctx: Context, config: Config) {
         return shellSession;
     }
 
-    function cleanupSession(shellSession: ShellSession) {
+    function cleanupSession(shellSession: ShellSession,key:string) {
+        map.delete(key);
         shellSession.disposables.forEach((d) => d.dispose());
         shellSession.terminal.kill();
         if (shellSession.timer) clearTimeout(shellSession.timer);
     }
 
     ctx.command("shell [command:text]", "Start a persistent shell session", {authority: 4})
-        .option("terminate", "-t --terminate Terminate current shell session")
+        .option("terminate", "-t Terminate current shell session")
         .usage("After start up, regular user messages will be sent to shell process.")
         .example("shell echo Operating System: Three Easy Pieces > qljj.txt")
         .action(async ({session, options}, command) => {
@@ -140,7 +141,7 @@ export function apply(ctx: Context, config: Config) {
                 const current = map.get(key);
                 if (!current) return "There doesn't exist running shell session."
 
-                cleanupSession(current);
+                cleanupSession(current,key);
                 return "Shell session terminated."
             }
 

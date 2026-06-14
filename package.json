@@ -1,22 +1,33 @@
 {
-  "name": "koishi-plugin-terminal",
-  "description": "Persistent terminal interface to a shell session over QQ.",
-  "version": "1.0.0",
-  "main": "lib/index.js",
-  "typings": "lib/index.d.ts",
-  "files": [
-    "lib",
-    "dist"
-  ],
-  "license": "MIT",
-  "scripts": {},
-  "keywords": [
-    "chatbot",
-    "koishi",
-    "plugin"
-  ],
-  "devDependencies": {},
-  "peerDependencies": {
-    "koishi": "^4.18.7"
-  }
+    "name": "koishi-plugin-terminal",
+    "description": "Persistent terminal interface to a shell session over QQ.",
+    "version": "1.0.0",
+    "main": "lib/index.js",
+    "typings": "lib/index.d.ts",
+    "files": [
+        "lib",
+        "dist"
+    ],
+    "license": "MIT",
+    "scripts": {},
+    "keywords": [
+        "chatbot",
+        "koishi",
+        "plugin",
+        "shell",
+        "terminal",
+        "cmd",
+        "bash",
+        "zsh"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Jingmozhiyu/koishi-plugin-terminal.git"
+    },
+    "peerDependencies": {
+        "koishi": "^4.18.7"
+    },
+    "dependencies": {
+        "node-pty": "^1.1.0"
+    }
 }
