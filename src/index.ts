@@ -5,6 +5,8 @@ import {stripAnsi} from "./stripper";
 import {Config} from "./config";
 import {fixNodePtyHelper, getKey, isInteractiveCommand, resolveShell} from "./helper";
 
+export * from './config'
+
 export const name = 'terminal'
 
 export interface ShellSession {
