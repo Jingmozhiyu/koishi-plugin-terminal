@@ -1,22 +1,11 @@
-import {Context, Schema, Time} from 'koishi'
+import {Context, h, Schema, Time} from 'koishi'
 import * as pty from "node-pty";
-import {chmodSync, statSync} from 'node:fs'
-import {dirname, join} from 'node:path'
 import {clearTimeout} from "node:timers";
+import {stripAnsi} from "./stripper";
+import {Config} from "./config";
+import {fixNodePtyHelper, getKey, isInteractiveCommand, resolveShell} from "./helper";
 
 export const name = 'terminal'
-
-
-export interface Config {
-    admin?: Array<string>;
-    auth?:number;
-    root?: string;
-    shell?: string;
-    timeout?: number;
-    cols?: number;
-    rows?: number;
-    maxOutputLength: number;
-}
 
 export interface ShellSession {
     terminal: pty.IPty;
@@ -24,79 +13,6 @@ export interface ShellSession {
     timer?: NodeJS.Timeout;
     timeoutTimer?: NodeJS.Timeout;
     disposables: Array<{ dispose(): void }>
-}
-
-export const Config: Schema<Config> = Schema.object({
-    admin: Schema.array(String).description("超级管理员用户名单").default([]),
-    auth: Schema.number().description("使用本插件所需的最低权限，此外，用户也需要在超级管理员名单中。").min(1).max(4).step(1).default(4),
-    root: Schema.string().description("初始工作路径").default(process.env.HOME),
-    shell: Schema.string().description("Shell路径，留空则自动检测系统默认Shell"),
-    timeout: Schema.number().description("超时时长").default(Time.minute),
-    cols: Schema.number().description("终端列数").default(80),
-    rows: Schema.number().description("终端行数").default(24),
-    maxOutputLength: Schema.number().description('单次发送最大输出长度').default(16384),
-})
-
-function resolveShell(shell?: string) {
-    if (shell) return shell;
-    switch (process.platform) {
-        case "win32":
-            return process.env.COMSPEC || "powershell.exe";
-        case "darwin":
-            return process.env.SHELL || "zsh";
-        case "linux":
-            return process.env.SHELL || "bash";
-    }
-    return "bash";
-}
-
-function stripAnsi(input: string) {
-    const text = input.replace(
-        // eslint-disable-next-line no-control-regex
-        /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g,
-        ''
-    )
-
-    return text
-        .replace(/\r\n/g, '\n')
-        .split('\n')
-        .map((line) => line.split('\r').at(-1))
-        .join('\n')
-}
-
-function getKey(session: any) {
-    return `${session.platform}:${session.userId}`;
-}
-
-function fixNodePtyHelper() {
-    if (process.platform !== 'darwin') return;
-
-    try {
-        const root = dirname(require.resolve('node-pty/package.json'));
-        const helper = join(root, 'prebuilds', `darwin-${process.arch}`, 'spawn-helper');
-        const mode = statSync(helper).mode;
-        if (!(mode & 0o111)) chmodSync(helper, mode | 0o755);
-    } catch {}
-}
-
-function isInteractiveCommand(command: string) {
-    const trimmed = command.trim();
-    if (!trimmed) return false;
-
-    const [name, ...args] = trimmed.split(/\s+/);
-
-    if (/^(vi|vim|nvim|nano|emacs)$/.test(name)) return true
-    if (/^(less|more|man)$/.test(name)) return true
-    if (/^(top|htop|btop|watch)$/.test(name)) return true
-    if (/^(tmux|screen)$/.test(name)) return true
-    if (/^(sftp|ftp|telnet)$/.test(name)) return true
-    if (/^(mysql|psql|sqlite3|redis-cli|mongosh)$/.test(name)) return true
-    if (/^(node|python|python3|ipython|ruby|irb|php|lua|R)$/.test(name) && !args.length) return true
-
-    if (name === 'tail' && args.includes('-f')) return true
-    if (name === 'docker' && args.includes('exec') && args.some(arg => arg.includes('it'))) return true
-    if (name === 'kubectl' && args.includes('exec') && args.some(arg => arg.includes('it'))) return true
-    return false;
 }
 
 const map = new Map<string, ShellSession>();
@@ -134,7 +50,13 @@ export function apply(ctx: Context, config: Config) {
             cols: config.cols,
             rows: config.rows,
             cwd: config.root,
-            env: process.env,
+            env: {
+                ...process.env,
+                PAGER: 'cat',
+                MANPAGER: 'cat',
+                GIT_PAGER: 'cat',
+                LESS: '-FRX',
+            }
         })
 
         const shellSession: ShellSession = {
@@ -154,7 +76,7 @@ export function apply(ctx: Context, config: Config) {
                 output.slice(0, config.maxOutputLength - 1) + "\n ...Truncated output"
                 : output
 
-            await session.send(text);
+            await session.send(h.text(text));
         }
 
         const dataDisposable = terminal.onData((data) => {
@@ -189,9 +111,9 @@ export function apply(ctx: Context, config: Config) {
         }
     }
 
-    ctx.command("shell [command:text]", "Start a persistent shell session", {authority: config.auth})
+    ctx.command("shell [command:text]", "Start a persistent shell session.", {authority: config.auth})
         .option("terminate", "-t Terminate current shell session")
-        .usage("After start up, regular user messages will be sent to shell process.")
+        .usage("After start up, user messages will be sent to shell process.")
         .example("shell echo Operating System: Three Easy Pieces > qljj.txt")
         .action(async ({session, options}, command) => {
 
