@@ -1,4 +1,4 @@
-import {Context, h, Schema, Time} from 'koishi'
+import {Context, h} from 'koishi'
 import * as pty from "node-pty";
 import {clearTimeout} from "node:timers";
 import {stripAnsi} from "./stripper";
