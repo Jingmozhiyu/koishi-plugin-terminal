@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-terminal",
   "description": "Persistent terminal interface to a shell session over QQ.",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
