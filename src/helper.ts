@@ -21,13 +21,14 @@ export function resolveShellArgs(shell?: string) {
 }
 
 export function resolveRoot(root?: string) {
-    return root || os.homedir();
+    return root || os.userInfo().homedir || os.homedir();
 }
 
 export function resolveEnv(shell?: string) {
-    const env: NodeJS.ProcessEnv = {...process.env, HOME: os.homedir()};
+    const home = os.userInfo().homedir || os.homedir();
+    const env: NodeJS.ProcessEnv = {...process.env, HOME: home};
     if (process.platform === "darwin" && /(^|\/)zsh$/.test(resolveShell(shell))) {
-        env.ZDOTDIR = os.homedir();
+        env.ZDOTDIR = home;
     }
     return env;
 }
