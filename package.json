@@ -1,7 +1,7 @@
 {
     "name": "koishi-plugin-terminal",
     "description": "通过 QQ 运行持久的 Shell 终端",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "main": "lib/index.js",
     "author": {
         "email": "ygong68@wisc.edu",

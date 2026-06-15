@@ -3,7 +3,7 @@ import * as pty from "node-pty";
 import {clearTimeout} from "node:timers";
 import {stripAnsi} from "./stripper";
 import {Config} from "./config";
-import {fixNodePtyHelper, getKey, isInteractiveCommand, resolveShell} from "./helper";
+import {fixNodePtyHelper, getKey, isInteractiveCommand, resolveEnv, resolveRoot, resolveShell, resolveShellArgs} from "./helper";
 
 export * from './config'
 
@@ -47,13 +47,13 @@ export function apply(ctx: Context, config: Config) {
     }
 
     function initSession(session, key:string): ShellSession {
-        const terminal = pty.spawn(resolveShell(config.shell), [], {
+        const terminal = pty.spawn(resolveShell(config.shell), resolveShellArgs(config.shell), {
             name: "terminal",
             cols: config.cols,
             rows: config.rows,
-            cwd: config.root,
+            cwd: resolveRoot(config.root),
             env: {
-                ...process.env,
+                ...resolveEnv(config.shell),
                 PAGER: 'cat',
                 MANPAGER: 'cat',
                 GIT_PAGER: 'cat',

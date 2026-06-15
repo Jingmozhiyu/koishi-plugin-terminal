@@ -1,5 +1,6 @@
 import {dirname, join} from "node:path";
 import {chmodSync, statSync} from "node:fs";
+import * as os from "node:os";
 
 export function resolveShell(shell?: string) {
     if (shell) return shell;
@@ -12,6 +13,23 @@ export function resolveShell(shell?: string) {
             return process.env.SHELL || "bash";
     }
     return "bash";
+}
+
+export function resolveShellArgs(shell?: string) {
+    if (process.platform !== "darwin") return [];
+    return /(^|\/)(zsh|bash|sh)$/.test(resolveShell(shell)) ? ["-l"] : [];
+}
+
+export function resolveRoot(root?: string) {
+    return root || os.homedir();
+}
+
+export function resolveEnv(shell?: string) {
+    const env: NodeJS.ProcessEnv = {...process.env, HOME: os.homedir()};
+    if (process.platform === "darwin" && /(^|\/)zsh$/.test(resolveShell(shell))) {
+        env.ZDOTDIR = os.homedir();
+    }
+    return env;
 }
 
 export function getKey(session: any) {
