@@ -3,7 +3,15 @@ import * as pty from "node-pty";
 import {clearTimeout} from "node:timers";
 import {stripAnsi} from "./stripper";
 import {Config} from "./config";
-import {fixNodePtyHelper, getKey, isInteractiveCommand, resolveEnv, resolveRoot, resolveShell, resolveShellArgs} from "./helper";
+import {
+    fixNodePtyHelper,
+    getKey,
+    isInteractiveCommand,
+    resolveEnv,
+    resolveRoot,
+    resolveShell,
+    resolveShellArgs
+} from "./helper";
 
 export * from './config'
 
@@ -14,7 +22,8 @@ export interface ShellSession {
     buffer: string;
     timer?: NodeJS.Timeout;
     timeoutTimer?: NodeJS.Timeout;
-    disposables: Array<{ dispose(): void }>
+    disposables: Array<{ dispose(): void }>;
+    sendCommand: Function;
 }
 
 const map = new Map<string, ShellSession>();
@@ -24,29 +33,7 @@ export function apply(ctx: Context, config: Config) {
 
     const allowedUsers = config.admin;
 
-    function refreshTimeout(shellSession: ShellSession, key: string, session: any) {
-        if (!config.timeout) return;
-        if (shellSession.timeoutTimer) clearTimeout(shellSession.timeoutTimer);
-
-        shellSession.timeoutTimer = setTimeout(async () => {
-            if (map.get(key) !== shellSession) return;
-            cleanupSession(shellSession, key, true);
-            await session.send("Shell session timed out.");
-        }, config.timeout);
-    }
-
-    function sendCommand(shellSession: ShellSession, key: string, session: any, command: string) {
-        refreshTimeout(shellSession, key, session);
-
-        if (isInteractiveCommand(command)) {
-            shellSession.terminal.write(`echo "Interactive command is not supported in chat terminal. Use a non-interactive form, or run shell -t to restart."\r`);
-            return;
-        }
-
-        shellSession.terminal.write(command + "\r");
-    }
-
-    function initSession(session, key:string): ShellSession {
+    function initSession(session, key: string): ShellSession {
         const terminal = pty.spawn(resolveShell(config.shell), resolveShellArgs(config.shell), {
             name: "terminal",
             cols: config.cols,
@@ -61,10 +48,22 @@ export function apply(ctx: Context, config: Config) {
             }
         })
 
+        const sendCommand = (command: string) => {
+            refreshTimeout(shellSession, key, session);
+
+            if (isInteractiveCommand(command)) {
+                shellSession.terminal.write(`echo "Interactive command is not supported in chat terminal. Use a non-interactive form, or run shell -t to restart."\r`);
+                return;
+            }
+
+            shellSession.terminal.write(command + "\r");
+        }
+
         const shellSession: ShellSession = {
             terminal,
             buffer: "",
             disposables: [],
+            sendCommand
         }
 
         const flush = async () => {
@@ -81,6 +80,7 @@ export function apply(ctx: Context, config: Config) {
             await session.send(h.text(text));
         }
 
+
         const dataDisposable = terminal.onData((data) => {
             shellSession.buffer += data;
             if (shellSession.timer) clearTimeout(shellSession.timer);
@@ -88,8 +88,8 @@ export function apply(ctx: Context, config: Config) {
         })
 
         const exitDisposable = terminal.onExit(async () => {
-            flush();
-            cleanupSession(shellSession,key,false);
+            await flush();
+            cleanupSession(shellSession, key, false);
             await session.send("Shell exited.")
         })
 
@@ -99,7 +99,7 @@ export function apply(ctx: Context, config: Config) {
         return shellSession;
     }
 
-    function cleanupSession(shellSession: ShellSession,key:string,kill=true) {
+    function cleanupSession(shellSession: ShellSession, key: string, kill = true) {
         map.delete(key);
         if (shellSession.timer) clearTimeout(shellSession.timer);
         if (shellSession.timeoutTimer) clearTimeout(shellSession.timeoutTimer);
@@ -109,11 +109,24 @@ export function apply(ctx: Context, config: Config) {
         if (kill) {
             try {
                 shellSession.terminal.kill()
-            } catch {}
+            } catch {
+            }
         }
     }
 
+    function refreshTimeout(shellSession: ShellSession, key: string, session: any) {
+        if (!config.timeout) return;
+        if (shellSession.timeoutTimer) clearTimeout(shellSession.timeoutTimer);
+
+        shellSession.timeoutTimer = setTimeout(async () => {
+            if (map.get(key) !== shellSession) return;
+            cleanupSession(shellSession, key, true);
+            await session.send("Shell session timed out.");
+        }, config.timeout);
+    }
+
     ctx.command("shell [command:text]", "Start a persistent shell session.", {authority: config.auth})
+        .alias("sh")
         .option("terminate", "-t Terminate current shell session")
         .usage("After start up, user messages will be sent to shell process.")
         .example("shell echo Operating System: Three Easy Pieces > qljj.txt")
@@ -131,7 +144,7 @@ export function apply(ctx: Context, config: Config) {
                 const current = map.get(key);
                 if (!current) return "There doesn't exist running shell session."
 
-                cleanupSession(current,key,true);
+                cleanupSession(current, key, true);
                 return "Shell session terminated."
             }
 
@@ -139,11 +152,11 @@ export function apply(ctx: Context, config: Config) {
             let current = map.get(key)
             if (!current) {
                 current = initSession(session, key);
-                if (!command) return "Shell session started. Send regular messages as commands. Send shell -t to terminate."
+                if (!command) return "Shell session started. Send shell -t to terminate."
             }
 
             if (!command) return "Shell session is running."
-            sendCommand(current, key, session, command)
+            current.sendCommand(command)
         })
 
     ctx.middleware(async (session, next) => {
@@ -154,13 +167,13 @@ export function apply(ctx: Context, config: Config) {
 
         const content = session.content.trim();
 
-        if (content === "shell" || content === "shell -t") {
+        if (content === "shell" || content === "shell -t" || content === "sh" || content === "sh -t") {
             return next();
         }
 
         if (!content) return;
 
-        sendCommand(current, key, session, content);
+        current.sendCommand(content);
     }, true)
 
     ctx.on("dispose", () => {
