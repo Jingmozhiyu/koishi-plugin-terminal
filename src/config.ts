@@ -3,6 +3,7 @@ import * as os from "node:os";
 
 export interface Config {
     admin?: Array<string>;
+    alias?:string;
     auth?:number;
     root?: string;
     shell?: string;
@@ -14,6 +15,7 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.object({
     admin: Schema.array(String).description("超级管理员用户名单").default([]),
+    alias: Schema.string().description("指令别名").default("sh"),
     auth: Schema.number().description("使用本插件所需的最低权限，此外，用户也需要在超级管理员名单中。").min(1).max(4).step(1).default(4),
     root: Schema.string().description("初始工作路径").default(os.userInfo().homedir || os.homedir()),
     shell: Schema.string().description("Shell路径，留空则自动检测系统默认Shell"),

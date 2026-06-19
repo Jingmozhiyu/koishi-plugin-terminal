@@ -17,13 +17,31 @@ export * from './config'
 
 export const name = 'terminal'
 
+export const usage = `
+### 用前须知 ⚠️
+
+- 本插件配置了**白名单列表**和**权限等级**（默认为4）双重保险，确保终端会话不会被恶意发起。
+- 目前插件不会拦截任何风险指令，不要将该插件的使用权限授予无法完全信任的用户。
+
+### 使用方法
+
+- 开启终端会话： \`shell\`
+- 结束终端会话： \`shell -t\`
+
+开启会话后，用户的输入会直接进入终端。发送消息即可和 Shell 交互。\n
+- \`echo $PATH > a.txt\`
+- \`ssh chilly@best-linux.cs.wisc.edu\`
+
+通过 QQ 发起的终端会话不支持 vim/nano 等文本编辑器。
+`
+
 export interface ShellSession {
     terminal: pty.IPty;
     buffer: string;
     timer?: NodeJS.Timeout;
     timeoutTimer?: NodeJS.Timeout;
     disposables: Array<{ dispose(): void }>;
-    sendCommand: Function;
+    sendCommand: (command: string) => void;
 }
 
 const map = new Map<string, ShellSession>();
@@ -126,7 +144,7 @@ export function apply(ctx: Context, config: Config) {
     }
 
     ctx.command("shell [command:text]", "Start a persistent shell session.", {authority: config.auth})
-        .alias("sh")
+        .alias(config.alias)
         .option("terminate", "-t Terminate current shell session")
         .usage("After start up, user messages will be sent to shell process.")
         .example("shell echo Operating System: Three Easy Pieces > qljj.txt")
@@ -167,7 +185,7 @@ export function apply(ctx: Context, config: Config) {
 
         const content = session.content.trim();
 
-        if (content === "shell" || content === "shell -t" || content === "sh" || content === "sh -t") {
+        if (content === "shell" || content === "shell -t" || content === config.alias || content ===  `${config.alias} -t`) {
             return next();
         }
 
